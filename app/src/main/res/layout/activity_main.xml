@@ -7,7 +7,7 @@
     android:background="@color/main_screen_content_background_color"
     android:padding="@dimen/main_screen_content_padding"
     android:orientation="vertical"
-    tools:context=".MainActivity">
+    tools:context=".activities.MainActivity">
 
 
     <LinearLayout

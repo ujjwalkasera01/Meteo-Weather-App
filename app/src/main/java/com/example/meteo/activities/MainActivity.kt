@@ -1,4 +1,4 @@
-package com.example.meteo
+package com.example.meteo.activities
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -7,7 +7,6 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
@@ -22,7 +21,8 @@ import android.view.MenuItem
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AlertDialog
-import androidx.core.app.ActivityCompat
+import com.example.meteo.utils.Constants
+import com.example.meteo.R
 import com.example.meteo.databinding.ActivityMainBinding
 import com.example.meteo.models.WeatherResponse
 import com.example.meteo.network.WeatherService
@@ -45,33 +45,57 @@ import java.util.TimeZone
 
 class MainActivity : AppCompatActivity() {
 
+    // A fused location client variable which is further user to get the user's current location
     private lateinit var mFusedLocationClient: FusedLocationProviderClient
+
+    // Creating a variable for viewBinding
     private lateinit var binding : ActivityMainBinding
+
+    // A global variable for the SharedPreferences
     private lateinit var mSharedPreferences: SharedPreferences
 
+    // A global variable for Progress Dialog
     private var mProgressDialog: Dialog? = null
+
+    // A global variable for Current Latitude
+    private var mLatitude: Double = 0.0
+    // A global variable for Current Longitude
+    private var mLongitude: Double = 0.0
 
     @RequiresApi(Build.VERSION_CODES.N)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         setContentView(R.layout.activity_main)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Initialize the Fused location variable
         mFusedLocationClient= LocationServices.getFusedLocationProviderClient(this)
 
+        // Initialize the SharedPreferences variable
         mSharedPreferences = getSharedPreferences(Constants.PREFERENCE_NAME,Context.MODE_PRIVATE)
+
+        /** Call the UI method to populate the data in the UI which are already
+         * stored in sharedPreferences earlier. At first run it will be blank */
 
         setUpUI()
 
         if(!isLocationEnabled()){
-            Toast.makeText(this,"Please Turned ON Your Location",Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "Please Turned ON Your Location",
+                Toast.LENGTH_SHORT
+            ).show()
+
+            // This will redirect you to settings from where you need to turn on the location provider.
             val intent = Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
             startActivity(intent)
         }else{
-            Dexter.withContext(this).withPermissions(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
+            Dexter.withContext(this)
+                .withPermissions(
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION
             ).withListener(object : MultiplePermissionsListener{
                 override fun onPermissionsChecked(report: MultiplePermissionsReport?) {
                     if(report!!.areAllPermissionsGranted()){
@@ -79,14 +103,18 @@ class MainActivity : AppCompatActivity() {
                     }
                     else if(report.isAnyPermissionPermanentlyDenied){
                         showRationalDialogForPermissions()
-                        Toast.makeText(this@MainActivity,
+                        Toast.makeText(
+                            this@MainActivity,
                             "You have denied location permission. PLease enabled it."
-                            ,Toast.LENGTH_SHORT).show()
+                            ,Toast.LENGTH_SHORT
+                        ).show()
                     }
-                    else {  //if it's a simple "deny" from the user
-                        Toast.makeText(this@MainActivity,
+                    else {// if it's a simple "deny" from the user
+                        Toast.makeText(
+                            this@MainActivity,
                             "This permission is required to access your location"
-                            ,Toast.LENGTH_SHORT).show()
+                            ,Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
 
@@ -100,19 +128,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** A function to request the current location. Using the fused location provider client. */
     @SuppressLint("MissingPermission")
     private fun requestLocationData(){
         val mLocationRequest = LocationRequest()
         mLocationRequest.priority = LocationRequest.PRIORITY_HIGH_ACCURACY
 
-//        mFusedLocationClient.requestLocationUpdates(
-//            mLocationRequest,mLocationCallback, Looper.myLooper())
+        /**
+         * A location callback object of fused location provider client
+         * where we will get the current location details.
+         */
         val locationCallback = object : LocationCallback() {
-            override fun onLocationResult(p0: LocationResult) {
-                val mLastLocation: Location = p0.lastLocation!!
-                val mLatitude = mLastLocation.latitude
+            override fun onLocationResult(locationResult: LocationResult) {
+
+                val mLastLocation: Location = locationResult.lastLocation!!
+
+                mLatitude = mLastLocation.latitude
                 Log.i("Current Latitude", "$mLatitude")
-                val mLongitude = mLastLocation.longitude
+                mLongitude = mLastLocation.longitude
                 Log.i("Current Longitude", "$mLongitude")
 
                 getLocationWeatherDetails(mLatitude, mLongitude)
@@ -125,46 +158,74 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-//    val mLocationCallback = object : LocationCallback(){
-//        override fun onLocationResult(locationResult: LocationResult) {
-//            val mLastLocation : Location? = locationResult.lastLocation
-//            val latitude = mLastLocation!!.latitude
-//            val longitude = mLastLocation.longitude
-//            Log.e("Current location","lat:$latitude,long:$longitude")
-//            getLocationWeatherDetails(latitude,longitude)
-//        }
-//    }
-
+    /**
+     * Function is used to get the weather details of the current
+     * location based on the latitude longitude
+     */
     private fun getLocationWeatherDetails(latitude:Double,longitude:Double){
+
         if(Constants.isNetworkAvailable(this)){
+
+            /**
+             * Add the built-in converter factory first. This prevents overriding its
+             * behavior but also ensures correct behavior when using converters that consume all types.
+             */
             val retrofit : Retrofit = Retrofit.Builder()
+                // API base URL.
                 .baseUrl(Constants.BASE_URL)
+                /** Add converter factory for serialization and deserialization of objects. */
+                /** Create an instance using a default {@link Gson} instance for conversion.
+                 * Encoding to JSON and decoding from JSON
+                 * (when no charset is specified by a header) will use UTF-8.
+                 */
                 .addConverterFactory(GsonConverterFactory.create())
+                /** Create the Retrofit instances. */
                 .build()
 
-            val service : WeatherService = retrofit.create<WeatherService>(WeatherService::class.java)
+            /**
+             * Here we map the service interface in which we declares the end point and the API type
+             *i.e GET, POST and so on along with the request parameter which are required.
+             */
+            val service : WeatherService = retrofit.create(WeatherService::class.java)
 
+            /** An invocation of a Retrofit method that sends a request to a web-server
+             * and returns a response. Here we pass the required param in the service
+             */
             val listCall: Call<WeatherResponse> = service.getWeather(
-                latitude,longitude,Constants.METRIC_UNT,Constants.APP_ID)
+                latitude,longitude, Constants.METRIC_UNT, Constants.APP_ID
+            )
 
+            // Used to show the progress dialog
             showCustomProgressDialog()
+
+            // Callback methods are executed using the Retrofit callback executor.
             listCall.enqueue(object :Callback<WeatherResponse>{
                 @RequiresApi(Build.VERSION_CODES.N)
                 override fun onResponse(
                     call: Call<WeatherResponse>,
                     response: Response<WeatherResponse>,
                 ) {
-                    hideProgressDialog()
+                    // Check weather the response is success or not.
                     if(response.isSuccessful){
-                        val weatherList: WeatherResponse? =response.body()
 
+                        hideProgressDialog()
+
+                        /** The de-serialized response body of a successful response. */
+                        val weatherList: WeatherResponse? =response.body()
+                        Log.i("Weather Report","${weatherList}")
+
+                        // Here we have converted the model class in to Json String to store it in the SharedPreferences.
                         val weatherResponseJsonString = Gson().toJson(weatherList)
+                        // Save the converted string to shared preferences
                         val editor=mSharedPreferences.edit()
                         editor.putString(Constants.WEATHER_RESPONSE_DATA,weatherResponseJsonString)
                         editor.apply()
+
+                        /** Remove the weather detail object as we will be getting
+                         *  the object in form of a string in the setup UI method. */
                         setUpUI()
-                        Log.i("Weather Report","${weatherList}")
                     }else{
+                        // If the response is not success then we check the response code.
                         val rc = response. code()
                         when (rc) {
                             400 -> Log.e("Error 400", "Bad Connection")
@@ -174,22 +235,27 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
                 override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
-                    hideProgressDialog()
+                    hideProgressDialog() // Hides the progress dialog
                     Log.e("Errorrrrr",t.message.toString())
                 }
             })
-
         }else{
-            Toast.makeText(this,"No Internet Connection Available",
-                Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                "No Internet Connection Available",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
+    /** A function used to show the alert dialog when the
+     * permissions are denied and need to allow it from settings app info. */
     private fun showRationalDialogForPermissions(){
         AlertDialog.Builder(this)
-            .setMessage("It looks like you have turned off permissions. It can be Enabled under application Settings")
-            .setPositiveButton("Go to Settings"){
-                _,_ ->
+            .setMessage("It looks like you have turned off permissions. " +
+                    "It can be Enabled under application Settings")
+            .setPositiveButton("Go to Settings"
+            ){ _,_ ->
                     try {
                         val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
                         val uri = Uri.fromParts("package", packageName, null)
@@ -204,29 +270,30 @@ class MainActivity : AppCompatActivity() {
             }.show()
     }
 
+    /** A function which is used to verify that the
+     * location or GPS is enable or not of the user's device. */
     private fun isLocationEnabled() : Boolean{
-        val locationManager : LocationManager = getSystemService(LOCATION_SERVICE) as LocationManager
+
+        // This provides access to the system location services.
+        val locationManager : LocationManager =
+            getSystemService(LOCATION_SERVICE) as LocationManager
         return locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
                 || locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
     }
 
-    /**
-     * Method is used to show the Custom Progress Dialog.
-     */
+    /** Method is used to show the Custom Progress Dialog. */
     private fun showCustomProgressDialog() {
         mProgressDialog = Dialog(this)
 
-        /*Set the screen content from a layout resource.
-        The resource will be inflated, adding all top-level views to the screen.*/
+        /** Set the screen content from a layout resource.
+         * The resource will be inflated, adding all top-level views to the screen.*/
         mProgressDialog!!.setContentView(R.layout.dialog_custom_progress)
 
         //Start the dialog and display it on screen.
         mProgressDialog!!.show()
     }
 
-    /**
-     * This function is used to dismiss the progress dialog if it is visible to user.
-     */
+    /** This function is used to dismiss the progress dialog if it is visible to user. */
     private fun hideProgressDialog() {
         if (mProgressDialog != null) {
             mProgressDialog!!.dismiss()
@@ -234,6 +301,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        // Inflate the menu; this adds items to the action bar if it is present.
         menuInflater.inflate(R.menu.menu_main,menu)
         return super.onCreateOptionsMenu(menu)
     }
@@ -243,26 +311,33 @@ class MainActivity : AppCompatActivity() {
             R.id.action_refresh -> {
                 requestLocationData()
                 true
-            }else -> super.onOptionsItemSelected(item)
+            }
+            else -> super.onOptionsItemSelected(item)
         }
     }
 
-    /**
-     * Function is used to set the result in the UI elements.
-     */
+    /** Function is used to set the result in the UI elements. */
     @SuppressLint("SetTextI18n")
     @RequiresApi(Build.VERSION_CODES.N)
     private fun setUpUI() {
 
-        val weatherResponseJsonString = mSharedPreferences.getString(Constants.WEATHER_RESPONSE_DATA,"")
+        /** Here we get the stored response from SharedPreferences and
+         * again convert back to data object to populate the data in the UI.*/
+        val weatherResponseJsonString =
+            mSharedPreferences.getString(Constants.WEATHER_RESPONSE_DATA,"")
+
         if(!weatherResponseJsonString.isNullOrBlank()){
+
             val weatherList = Gson().fromJson(weatherResponseJsonString,WeatherResponse::class.java)
+
             // For loop to get the required data. And all are populated in the UI.
             for (z in weatherList!!.weather.indices) {
                 Log.i("NAMEEEEEEEE", weatherList.weather[z].main)
+
                 binding.tvMain.text = weatherList.weather[z].main
                 binding.tvMainDescription.text = weatherList.weather[z].description
-                binding.tvTemp.text = weatherList.main.temp.toString() + getUnit(application.resources.configuration.locales.toString())
+                binding.tvTemp.text = weatherList.main.temp.toString() +
+                        getUnit(application.resources.configuration.locales.toString())
                 binding.tvHumidity.text = weatherList.main.humidity.toString() + " per cent"
                 binding.tvMin.text = weatherList.main.temp_min.toString() + " min"
                 binding.tvMax.text = weatherList.main.temp_max.toString() + " max"
@@ -291,12 +366,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-
     }
 
-    /**
-     * Function is used to get the temperature unit value.
-     */
+    /** Function is used to get the temperature unit value. */
     private fun getUnit(value: String): String {
         Log.i("unitttttt", value)
         var unit = "°C"
@@ -306,9 +378,7 @@ class MainActivity : AppCompatActivity() {
         return unit
     }
 
-    /**
-     * The function is used to get the formatted time based on the Format and the LOCALE we pass to it.
-     */
+    /** The function is used to get the formatted time based on the Format and the LOCALE we pass to it. */
     private fun unixTime(timex: Long): String? {
         val date = Date(timex * 1000L)
         @SuppressLint("SimpleDateFormat")
