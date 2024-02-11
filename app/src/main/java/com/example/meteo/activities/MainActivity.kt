@@ -212,7 +212,7 @@ class MainActivity : AppCompatActivity() {
 
                         /** The de-serialized response body of a successful response. */
                         val weatherList: WeatherResponse? =response.body()
-                        Log.i("Weather Report","${weatherList}")
+                        Log.i("Weather Report","$weatherList")
 
                         // Here we have converted the model class in to Json String to store it in the SharedPreferences.
                         val weatherResponseJsonString = Gson().toJson(weatherList)
@@ -226,8 +226,7 @@ class MainActivity : AppCompatActivity() {
                         setUpUI()
                     }else{
                         // If the response is not success then we check the response code.
-                        val rc = response. code()
-                        when (rc) {
+                        when (response. code()) {
                             400 -> Log.e("Error 400", "Bad Connection")
                             404 -> Log.e("Error 404", "Not Found")
                             else -> Log.e("Error", "Generic Error")
@@ -236,7 +235,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 override fun onFailure(call: Call<WeatherResponse>, t: Throwable) {
                     hideProgressDialog() // Hides the progress dialog
-                    Log.e("Errorrrrr",t.message.toString())
+                    Log.e("Error",t.message.toString())
                 }
             })
         }else{
@@ -332,7 +331,7 @@ class MainActivity : AppCompatActivity() {
 
             // For loop to get the required data. And all are populated in the UI.
             for (z in weatherList!!.weather.indices) {
-                Log.i("NAMEEEEEEEE", weatherList.weather[z].main)
+                Log.i("NAME", weatherList.weather[z].main)
 
                 binding.tvMain.text = weatherList.weather[z].main
                 binding.tvMainDescription.text = weatherList.weather[z].description
@@ -370,7 +369,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Function is used to get the temperature unit value. */
     private fun getUnit(value: String): String {
-        Log.i("unitttttt", value)
+        Log.i("Unit", value)
         var unit = "°C"
         if (value == "US" || "LR" == value || "MM" == value) {
             unit = "°F"
